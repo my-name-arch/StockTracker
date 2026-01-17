@@ -1,9 +1,8 @@
 name: Daily Stock Report
 on:
   schedule:
-    - cron: '0 05 * * *'  # 9 AM EST = 2 PM UTC
+    - cron: '30 20 * * *'  # 12:30 PM PST = 8:30 PM UTC
   workflow_dispatch:  # Allow manual trigger
-
 jobs:
   run-report:
     runs-on: ubuntu-latest
