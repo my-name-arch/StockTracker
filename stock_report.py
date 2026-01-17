@@ -1,163 +1,3 @@
-# %%
-import subprocess
-import sys
-
-# List of packages you want to install
-packages = [
-    "yfinance",
-    "sendgrid",
-    "selenium",
-    "webdriver_manager",
-    "openai",
-    "newspaper3k"
-]
-
-# Install all packages in one pip command
-subprocess.check_call([sys.executable, "-m", "pip", "install", *packages])
-
-# %%
-import yfinance as yf
-import pandas as pd
-
-def get_pslv_metrics():
-    # Fetch 1 year of historical data for PSLV
-    pslv = yf.download("PSLV", period="5y")
-    
-    # Calculate 50-day and 200-day Simple Moving Averages (SMA)
-    pslv['SMA50'] = pslv['Close'].rolling(window=50).mean()
-    pslv['SMA200'] = pslv['Close'].rolling(window=200).mean()
-    
-    # Simple RSI Calculation (14-day)
-    delta = pslv['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    pslv['RSI'] = 100 - (100 / (1 + rs))
-    
-    return pslv.tail(1)
-
-# Current data point
-latest_data = get_pslv_metrics()
-print(f"Current PSLV RSI: {latest_data['RSI'].values[0]:.2f}")
-
-# %%
-def calculate_pslv_target(spot_target, premium_discount=-0.035, oz_per_share=0.3438):
-    """
-    Calculates estimated PSLV share price based on a spot silver target.
-    
-    :param spot_target: The target price of 1oz of silver (e.g., 90.00)
-    :param premium_discount: The current % discount or premium (default -3.5% or -0.035)
-    :param oz_per_share: The current amount of silver per share (approx 0.3438 in 2026)
-    :return: Estimated PSLV share price
-    """
-    # 1. Calculate the Intrinsic Value (NAV)
-    nav_price = spot_target * oz_per_share
-    
-    # 2. Apply the Market Premium/Discount
-    estimated_price = nav_price * (1 + premium_discount)
-    
-    return round(estimated_price, 2)
-
-# Example: If your target for spot silver is $100.00
-target_spot = 100.00
-estimated_pslv = calculate_pslv_target(target_spot)
-
-print(f"If Spot Silver hits ${target_spot}, PSLV estimated price: ${estimated_pslv}")
-
-# %%
-
-
-# %%
-import yfinance as yf
-import pandas as pd
-# import smtplib
-# from email.mime.multipart import MIMEMultipart
-# from email.mime.text import MIMEText
-
-# -----------------------------
-# Step 1: Calculate PSLV metrics + RSI
-# -----------------------------
-def get_pslv_metrics_rsi(period=14):
-    pslv = yf.Ticker("PSLV")
-    silver = yf.Ticker("SI=F")
-    
-    # Latest price
-    pslv_price = pslv.history(period="1d")['Close'].iloc[-1]
-    silver_spot = silver.history(period="1d")['Close'].iloc[-1]
-    
-    oz_per_share = 0.3401
-    synthetic_nav = silver_spot * oz_per_share
-    discount = ((pslv_price - synthetic_nav) / synthetic_nav) * 100
-
-    # RSI calculation
-    hist = pslv.history(period="60d")['Close']  # last 60 days
-    delta = hist.diff()
-    gain = delta.clip(lower=0)
-    loss = -1 * delta.clip(upper=0)
-
-    avg_gain = gain.rolling(window=period, min_periods=period).mean()
-    avg_loss = loss.rolling(window=period, min_periods=period).mean()
-
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    latest_rsi = rsi.iloc[-1]  # most recent RSI
-
-    return pslv_price, synthetic_nav, discount, silver_spot, latest_rsi
-
-price, nav, disc, spot, rsi = get_pslv_metrics_rsi()
-
-# -----------------------------
-# Step 2: Compose email (optional, not sending)
-# -----------------------------
-subject = "Daily PSLV Metrics"
-body = f"""
-Silver Spot Price: ${spot:.2f} ideally we want $100
-PSLV Market Price: ${price:.2f} Sells at $33.18
-PSLV Synthetic NAV: ${nav:.2f}
-Current Discount: {disc:.2f}% Ideally 0% is the fair price
-PSLV RSI (14-day): {rsi:.2f}  # <30 oversold, >70 overbought
-"""
-
-# -----------------------------
-# Step 3: Skip sending email
-# -----------------------------
-# Everything below is commented out
-"""
-sender_email = "aarondooleykim@gmail.com"
-receiver_email = "dkim4@macalester.edu"
-app_password = "uxrx oeuf atsl xhba"
-
-msg = MIMEMultipart()
-msg['From'] = sender_email
-msg['To'] = receiver_email
-msg['Subject'] = subject
-msg.attach(MIMEText(body, 'plain'))
-
-try:
-    server = smtplib.SMTP('smtp.gmail.com', 587)
-    server.starttls()
-    server.login(sender_email, app_password)
-    server.send_message(msg)
-    server.quit()
-    print("Email sent successfully!")
-except Exception as e:
-    print("Error sending email:", e)
-"""
-
-# -----------------------------
-# Step 4: Print PSLV metrics
-# -----------------------------
-print(f"Silver Spot Price: ${spot:.2f} — ideally we want $100 when we sell it")
-print(f"PSLV Market Price: ${price:.2f} — Sells at $33.18")
-print(f"PSLV Synthetic NAV: ${nav:.2f}")
-print(f"Current Discount: {disc:.2f}% — Ideally it is negative but sell when it gets positive")
-print(f"PSLV RSI (14-day): {rsi:.2f} — Sell when RSI>70")
-
-
-# %%
-
-
-# %%
 # =============================
 # Required packages
 # =============================
@@ -170,11 +10,12 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import re
+import os
 
 # =============================
 # CONFIGURATION
 # =============================
-NEWS_API_KEY = "a7f1d21177364f20a73c91f2c924b0fd"
+NEWS_API_KEY = os.environ.get("NEWS_API_KEY", "a7f1d21177364f20a73c91f2c924b0fd")
 
 SENDER_EMAIL = "aarondooleykim@gmail.com"
 SENDER_PASSWORD = "uxrx oeuf atsl xhba"
@@ -496,5 +337,56 @@ print("\n" + "="*60)
 print("✅ Report complete!")
 print("="*60)
 
+# =============================
+# SAVE TEXT REPORT FOR GITHUB ACTIONS
+# =============================
+with open('report.txt', 'w', encoding='utf-8') as f:
+    f.write(f"Daily Stock Report - {datetime.now().strftime('%Y-%m-%d %I:%M %p PST')}\n")
+    f.write("=" * 60 + "\n\n")
+    
+    # PSLV Metrics
+    f.write("📊 PSLV METRICS\n")
+    f.write("-" * 60 + "\n")
+    f.write(f"Silver Spot: ${silver_spot:.2f}\n")
+    f.write(f"PSLV Price: ${pslv_price:.2f}\n")
+    f.write(f"Synthetic NAV: ${pslv_nav:.2f}\n")
+    f.write(f"Discount: {pslv_discount:.2f}%\n")
+    f.write(f"RSI: {pslv_rsi:.1f}\n\n")
+    
+    # PSLV News
+    f.write("📰 PSLV NEWS\n")
+    f.write("-" * 60 + "\n")
+    if not pslv_news.empty:
+        for i, r in pslv_news.iterrows():
+            f.write(f"\n{i+1}. {r['title']}\n")
+            f.write(f"   {r['summary']}\n")
+            f.write(f"   🔗 {r['url']}\n")
+    else:
+        f.write("No PSLV articles found.\n")
+    
+    f.write("\n" + "=" * 60 + "\n\n")
+    
+    # Novo Nordisk Metrics
+    f.write("📊 NOVO NORDISK METRICS\n")
+    f.write("-" * 60 + "\n")
+    f.write(f"Stock Price: ${nvo_price:.2f}\n")
+    f.write(f"RSI: {nvo_rsi:.1f}\n")
+    f.write(f"52-Week High: ${nvo_52w_high:.2f}\n")
+    f.write(f"52-Week Low: ${nvo_52w_low:.2f}\n")
+    f.write(f"Avg Volume (30d): {nvo_volume:,.0f}\n\n")
+    
+    # Novo Nordisk News
+    f.write("📰 NOVO NORDISK NEWS\n")
+    f.write("-" * 60 + "\n")
+    if not nvo_news.empty:
+        for i, r in nvo_news.iterrows():
+            f.write(f"\n{i+1}. {r['title']}\n")
+            f.write(f"   {r['summary']}\n")
+            f.write(f"   🔗 {r['url']}\n")
+    else:
+        f.write("No Novo Nordisk articles found.\n")
+    
+    f.write("\n" + "=" * 60 + "\n")
+    f.write("✅ Report complete!\n")
 
-
+print("📄 Report saved to report.txt")
