@@ -1,19 +1,37 @@
 name: Daily Stock Report
 on:
   schedule:
-    - cron: '30 20 * * *'  # 12:30 PM PST = 8:30 PM UTC
-  workflow_dispatch:  # Allow manual trigger
+    - cron: '30 21 * * *'  # 12:30 PM PST = 8:30 PM UTC
+  workflow_dispatch:  # Allow manual trigger from Actions tab
+
 jobs:
   run-report:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+      
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+      
       - name: Install dependencies
         run: |
           pip install yfinance pandas requests beautifulsoup4
-      - name: Run report
+      
+      - name: Run stock report script
+        env:
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
         run: python stock_report.py
+      
+      - name: Send email with report
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: Daily Stock Report - ${{ github.run_number }}
+          to: dkim4@macalester.edu
+          from: aarondooleykim@gmail.com
+          body: file://report.txt
