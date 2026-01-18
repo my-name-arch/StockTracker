@@ -201,7 +201,29 @@ def fetch_filtered_news(query, keywords, days=7, max_articles=10):
 # =============================
 print("📊 Fetching stock metrics...")
 pslv_price, pslv_rsi = get_stock_metrics_rsi("PSLV")
-silver_spot = yf.Ticker("SI=F").history(period="1d")["Close"].iloc[-1]
+
+# Try multiple silver tickers with fallback
+silver_spot = None
+silver_tickers = ["SI=F", "SLV"]  # Silver futures, then SLV ETF as backup
+
+for ticker in silver_tickers:
+    try:
+        print(f"Trying {ticker}...")
+        data = yf.Ticker(ticker).history(period="5d")
+        if not data.empty:
+            silver_spot = data["Close"].iloc[-1]
+            # If using SLV, convert to approximate silver spot price
+            if ticker == "SLV":
+                silver_spot = silver_spot / 0.95  # SLV holds ~0.95 oz per share
+            print(f"✓ Got silver price from {ticker}: ${silver_spot:.2f}")
+            break
+    except Exception as e:
+        print(f"Failed to get {ticker}: {e}")
+        continue
+
+if silver_spot is None:
+    raise Exception("Could not fetch silver price from any source")
+
 pslv_nav = silver_spot * 0.3401
 pslv_discount = (pslv_price - pslv_nav) / pslv_nav * 100
 
